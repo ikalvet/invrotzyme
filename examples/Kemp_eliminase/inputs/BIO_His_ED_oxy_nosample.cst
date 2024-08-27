@@ -1,0 +1,112 @@
+# Rosetta matcher/enzdes CST description for Kemp Eliminase
+# Active consisting of a HIS-GLU/ASP dyad and SER/THR/TYR/GLN/ASN oxyanion hole
+# CYS coordinating to the Heme Fe based on UPO geometry
+# I. Kalvet, Baker lab, UW,   ikalvet@uw.edu
+
+
+################## CST_1 ( His base ) ###############
+CST::BEGIN
+
+  TEMPLATE::   ATOM_MAP: 1 atom_name: C7 N1 O1
+  TEMPLATE::   ATOM_MAP: 1 residue3:  BIO
+
+  TEMPLATE::   ATOM_MAP: 2 atom_type: Nhis
+  TEMPLATE::   ATOM_MAP: 2 residue1: H
+
+  CONSTRAINT:: distanceAB:    2.68   0.15  100.   1   0
+  CONSTRAINT::    angle_A:   125.8  5.0  100.0  360. 0
+  CONSTRAINT::    angle_B:  114.7   5.0   75.0  360. 0
+  CONSTRAINT::  torsion_A:  180.0   5.0   75.0  360. 0
+  CONSTRAINT:: torsion_AB:   58.5  45.0    0.0   90. 0
+  CONSTRAINT::  torsion_B:  180.0   5.0   25.0  360. 0
+
+CST::END
+
+################## CST_2 ( GLU/ASP activating His ) ###############
+CST::BEGIN
+
+TEMPLATE::   ATOM_MAP: 1 atom_type: Ntrp
+TEMPLATE::   ATOM_MAP: 1 residue3:  HIS
+
+TEMPLATE::   ATOM_MAP: 2 atom_type: OOC
+TEMPLATE::   ATOM_MAP: 2 residue1: ED
+
+
+CONSTRAINT:: distanceAB:   2.62  0.2   100.  1    0
+CONSTRAINT::    angle_A:  126.0  15.0   50.0  360. 0
+CONSTRAINT::    angle_B:  106.5  25.0   50.0  180. 0
+CONSTRAINT::  torsion_A:    0.0  25.0   50.0  180. 0
+CONSTRAINT:: torsion_AB:   90.0  10.0    0.0  180. 0
+CONSTRAINT::  torsion_B:  180.0  60.0   25.0  360. 0
+
+  ALGORITHM_INFO:: match
+     SECONDARY_MATCH: UPSTREAM_CST 1
+  ALGORITHM_INFO::END
+
+CST::END
+
+
+
+################## CST_3 ( oxyanion hole ) ###############
+############  either SER/THR or TYR or ASN/GLN  ##########
+VARIABLE_CST::BEGIN
+
+ CST::BEGIN
+  TEMPLATE::   ATOM_MAP: 1 atom_name: O1 N1 C7
+  TEMPLATE::   ATOM_MAP: 1 residue3: BIO
+ 
+  TEMPLATE::   ATOM_MAP: 2 atom_type: OH 
+  TEMPLATE::   ATOM_MAP: 2 residue1:  ST
+ 
+  CONSTRAINT:: distanceAB:    2.81    0.2   80.0    0   0 
+  CONSTRAINT::    angle_A:   150.0    5.0   10.0  360   0 
+  CONSTRAINT::    angle_B:   100.0    5.0   10.0  360   0 
+  CONSTRAINT::  torsion_A:   180.0   10.0   10.0  360   0 
+  CONSTRAINT:: torsion_AB:    71.0   10.0   10.0   90   0
+  CONSTRAINT::  torsion_B:   180.0   10.0   10.0  120   0 
+ 
+  ALGORITHM_INFO:: match
+   SECONDARY_MATCH: DOWNSTREAM
+  ALGORITHM_INFO::END
+ CST::END
+
+ CST::BEGIN
+  TEMPLATE::   ATOM_MAP: 1 atom_name: O1 N1 C7
+  TEMPLATE::   ATOM_MAP: 1 residue3: BIO
+ 
+  TEMPLATE::   ATOM_MAP: 2 atom_name: OH CZ CE2 
+  TEMPLATE::   ATOM_MAP: 2 residue3:  TYR
+ 
+  CONSTRAINT:: distanceAB:    2.81    0.2   80.0    0   0 
+  CONSTRAINT::    angle_A:   150.0    5.0   10.0  360   0 
+  CONSTRAINT::    angle_B:   100.0    5.0   10.0  360   0 
+  CONSTRAINT::  torsion_A:   180.0   10.0   10.0  360   0 
+  CONSTRAINT:: torsion_AB:    71.0   10.0   10.0   90   0
+  CONSTRAINT::  torsion_B:    90.0   10.0   10.0  180   0 
+ 
+  ALGORITHM_INFO:: match
+   SECONDARY_MATCH: DOWNSTREAM
+  ALGORITHM_INFO::END
+ CST::END
+ 
+ CST::BEGIN
+  TEMPLATE::   ATOM_MAP: 1 atom_name: O1 N1 C7
+  TEMPLATE::   ATOM_MAP: 1 residue3: BIO
+ 
+  TEMPLATE::   ATOM_MAP: 2 atom_type: NH2O
+  TEMPLATE::   ATOM_MAP: 2 residue1: NQ
+ 
+  CONSTRAINT:: distanceAB:    2.81    0.2   80.0    0   0 
+  CONSTRAINT::    angle_A:   150.0    5.0   10.0  360   0 
+  CONSTRAINT::    angle_B:   100.0    5.0   10.0  360   0 
+  CONSTRAINT::  torsion_A:   180.0   10.0   10.0  360   0 
+  CONSTRAINT:: torsion_AB:    71.0   10.0   10.0   90   0
+  CONSTRAINT::  torsion_B:   180.0   10.0   10.0  180   0 
+
+  ALGORITHM_INFO:: match
+   SECONDARY_MATCH: DOWNSTREAM
+  ALGORITHM_INFO::END
+ CST::END
+
+VARIABLE_CST::END
+

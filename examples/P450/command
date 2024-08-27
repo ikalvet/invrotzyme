@@ -1,0 +1,1 @@
+python ../../invrotzyme.py --cstfile inputs/HBA_CYS_P450_nosample.cst --params inputs/HBA_unique.params --motif_for_cst 1:3:inputs/P450_motif.pdb --frac_random_rotamers 0.1 --prefix outputs/

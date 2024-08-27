@@ -1,0 +1,1 @@
+python ../../invrotzyme.py --cstfile inputs/BIO_His_ED_oxy_nosample.cst --params inputs/BIO.params --dunbrack_prob 0.6 --frac_random_rotamers_per_cst 0.5 0.5 0.5 0.5 --secstruct_per_cst H H E --prefix outputs/ --suffix HHE
