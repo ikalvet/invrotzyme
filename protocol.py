@@ -85,7 +85,7 @@ def parse_arguments(args, restypes):
 
 def parse_motif_input(motif_input, cst_atoms, restypes):
     motifs = {}
-    for motif_txt in motif_input.split(","):
+    for motif_txt in motif_input:
         motif_cst_no = int(motif_txt.split(":")[0])
         if motif_cst_no != 1:
             sys.exit("External motif not supported for not-first CST's right now.")
@@ -521,13 +521,63 @@ def calculate_samplings(chi_value, std, sampling_level):
 """
 Functions used during inverse rotamer assembly generation
 """
+def identify_cst_atoms_for_res(res, cst_no, catres_resno, _res_pose, cst_atompair_sets, motifs, ligands):
+    j = cst_no
+    catres_cst_atoms = {}
+    for subcst in cst_atompair_sets:
+        for respair in subcst:
+            # residue 1
+            if isinstance(res, pyrosetta.rosetta.core.conformation.Residue) and f"{res.name()}-{j}" in respair.keys():
+                _this_res = {catres_resno: respair[f"{res.name()}-{j}"]}
+            elif isinstance(res, pyrosetta.rosetta.core.pose.Pose) and f"{res.residue(motifs[j]['resno']).name()}-{j}" in respair.keys():
+                _this_res = {catres_resno: motifs[j]["atoms"]}
+            else:
+                _trgt = None
+                continue
 
-def check_clash(pose, catres_resnos, cutoff=1.7, ignore_respairs=None, tip_atom=False, debug=False):
+            # residue 2    (that residue 1 is constrained to)
+            _trgt = None
+            if j == 1:
+                _trgt = {_res_pose.size()+1: respair[ligands[0].name3()+f"-{j}"]}
+            else:
+                _trgt = [rn for rn,_ in respair.items() if f"-{j}" not in rn]
+                # target must be a ligand
+                if not any([ rn.split("-")[0] in [l.name3() for l in ligands] for rn in _trgt]):
+                    _trgt = None
+                    continue
+                else:
+                    if len(_trgt) != 1:
+                        _trgt = None
+                        continue
+                    for il, lig in enumerate(ligands):
+                        if il+1 != int(_trgt[0].split("-")[1]):
+                            continue
+                        _trgt = {_res_pose.size()+il+1: respair[_trgt[0]]}
+            if _trgt is None:
+                continue
+            else:
+                break
+        if _trgt is None:
+            continue
+        else:
+            break
+    if _trgt is not None:
+        # No validation is done whether correct CST atoms are used for this particular residue
+        # i.e. sitation where a variable CST is used with different sets of atoms from the same residue
+        catres_cst_atoms.update(_this_res)
+        catres_cst_atoms.update(_trgt)
+    else:
+        catres_cst_atoms = None
+    return catres_cst_atoms
+
+
+def check_clash(pose, catres_resnos, cutoff=1.7, ignore_respairs=None, cst_atoms=None, tip_atom=False, debug=False):
     """
     Checks for clashes between residue atoms
     Only consideres residues that have nbr_atom within 10 angstrom of eachother.
     Default clash cutoff is 1.7 angstrom.
     Clashes are not detected for N-H and O-H contacts.
+    cst_atoms: {resno1: (a1, a2, a3), resno2: (a1, a2, a3)}
     """
 
     # combs = itertools.product(*[x for x in [pose.residues, pose.residues]])
@@ -553,6 +603,13 @@ def check_clash(pose, catres_resnos, cutoff=1.7, ignore_respairs=None, tip_atom=
                             continue
                         for _n in range(r.attached_H_begin(r.atom_index(a)), r.attached_H_end(r.atom_index(a))+1):
                             _ignore_atoms[r.seqpos()].append(_n)
+        if cst_atoms is not None:
+            for r in [res1, res2]:
+                if r.seqpos() not in cst_atoms.keys():
+                    continue
+                for a in cst_atoms[r.seqpos()]:
+                    _ignore_atoms[r.seqpos()].append( r.atom_index(a.strip()) )
+
 
         if ignore_respairs is not None:
             if any([res1.seqpos() in p and res2.seqpos() in p for p in ignore_respairs]):
@@ -568,6 +625,7 @@ def check_clash(pose, catres_resnos, cutoff=1.7, ignore_respairs=None, tip_atom=
             continue
         if res1.is_virtual_residue() or res2.is_virtual_residue():
             continue
+
         for atm1 in range(1, res1.natoms()+1):
             if res1.is_virtual(atm1):
                 continue
@@ -582,7 +640,7 @@ def check_clash(pose, catres_resnos, cutoff=1.7, ignore_respairs=None, tip_atom=
                 if all([res1.atom_type(atm1).is_heavyatom(), res2.atom_type(atm2).is_heavyatom()]):
                     cutoff = 1.8
                 else:
-                    cutoff = 1.6
+                    cutoff = 1.5
                 _dist = (res1.xyz(atm1) - res2.xyz(atm2)).norm()
                 if _dist < cutoff:
                     if res1.atom_type(atm1).element() in "NO" and res2.atom_type(atm2).element() == "H":  # H-bonds are not clashes

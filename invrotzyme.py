@@ -30,7 +30,7 @@ import align_pdbs
 
 
 
-def process_rotamer_set_queue(q, prefix, bad_rotamers, rotamers, cst_io, motifs):
+def process_rotamer_set_queue(q, prefix, bad_rotamers, rotamers, cst_io, cst_atoms, motifs):
     while True:
         _s = q.get()
         if _s is None:
@@ -86,6 +86,9 @@ def process_rotamer_set_queue(q, prefix, bad_rotamers, rotamers, cst_io, motifs)
                 _res_pose = res.clone()
                 catres_resno = motifs[j]["resno"]
 
+            # Figuring out information about which CST atoms are used for this residue
+            catres_cst_atoms = protocol.identify_cst_atoms_for_res(res, j, catres_resno, _res_pose, cst_atoms[j], motifs, ligands)
+
 
             # Adding ligand to the extended chain and checking for clashes
             for ligand in ligands:
@@ -95,19 +98,19 @@ def process_rotamer_set_queue(q, prefix, bad_rotamers, rotamers, cst_io, motifs)
                                                  jump_root_atom=ligand.atom_name(ligand.nbr_atom()),
                                                  start_new_chain=True)
 
-            if protocol.check_clash(_res_pose, catres_resnos=[catres_resno]+[r.seqpos() for r in _res_pose.residues if r.is_ligand()], tip_atom=args.tip_atom, debug=args.debug) is True:
+            if protocol.check_clash(_res_pose, catres_resnos=[catres_resno]+[r.seqpos() for r in _res_pose.residues if r.is_ligand()], cst_atoms=catres_cst_atoms, tip_atom=args.tip_atom, debug=args.debug) is True:
                 if args.debug: print(f"{j}, clash after extension")
                 # Only adding the residude object to the bad residues
                 # The motif pose will never be dumped
                 if isinstance(res, pyrosetta.rosetta.core.conformation.Residue):
-                    bad_rotamers[j].append(ids[j])
-                    # print(j, ids[j], list(bad_rotamers[j]))
+                    if ids[j] not in bad_rotamers[j]:
+                        bad_rotamers[j].append(ids[j])
                 elif isinstance(res, pyrosetta.rosetta.core.pose.Pose):
                     if args.debug: print("MOTIF POSE SEEMS TO GIVE CLASH!!!! PLEASE INVESTIGATE!!!")
                 bad_rotamer = True
 
                 # Giving up if all rotamers are bad
-                if len(bad_rotamers[j]) == len(rotamers[j]):
+                if len(set(bad_rotamers[j])) == len(rotamers[j]):
                     print(f"All rotamers for CST {j} are bad...")
                 break
 
@@ -150,7 +153,7 @@ def process_rotamer_set_queue(q, prefix, bad_rotamers, rotamers, cst_io, motifs)
             if args.debug: print(f"{j}, clash in the final assembly")
             continue
         if args.debug: print(j, pose.sequence())
-        
+
         # TODO: Need to implement checking whether the pose actually respects the CST's
         # This is an issue when the ligand has any chi sampling enabled, and another residue is matched downstream of that.
         # Some combinations of rotamers are not meant to work together
@@ -192,7 +195,7 @@ def process_rotamer_set_queue(q, prefix, bad_rotamers, rotamers, cst_io, motifs)
 
 
 
-def parallelize_mp(iterables, rotset, prefix, cst_io, motifs):
+def parallelize_mp(iterables, rotset, prefix, cst_io, cst_atoms, motifs):
     print(f"{len(iterables)} configurations to process")
     the_queue = multiprocessing.Queue()  # Queue stores the iterables
 
@@ -210,7 +213,7 @@ def parallelize_mp(iterables, rotset, prefix, cst_io, motifs):
     print(f"Starting to generate inverse rotamer assemblies using {args.nproc} parallel processes.")
     pool = multiprocessing.Pool(processes=args.nproc,
                                 initializer=process_rotamer_set_queue,
-                                initargs=(the_queue, prefix, bad_rotamers, rotset, cst_io, motifs, ))
+                                initargs=(the_queue, prefix, bad_rotamers, rotset, cst_io, cst_atoms, motifs, ))
 
     # None to end each process
     for _i in range(args.nproc):
@@ -222,8 +225,9 @@ def parallelize_mp(iterables, rotset, prefix, cst_io, motifs):
     pool.close()
     pool.join()
     
+    print(f"Bad rotamers from set {prefix}:")
     for j in bad_rotamers:
-        print(j, list(bad_rotamers[j]))
+        print(f"   CST {j}: {list(set(bad_rotamers[j]))}")
 
     end = time.time()
     print(f"Processing all the rotamers in set {prefix} took {(end - start):.2f} seconds")
@@ -273,7 +277,6 @@ def main(args):
     # Using the MCFI (MatcherConstraintFileInfo) object for that
     # cst_atoms will be a dict where each cst_block contains a list of variable CST's? and then a list of residue types
     cst_atoms = protocol.get_cst_atoms(cst_io)
-
 
     # Storing information about which residues are matched for each CST block
     restypes = {}
@@ -403,7 +406,7 @@ def main(args):
         combs = itertools.product(*[x for x in rotset_ids])
 
         # Processing this subset of rotamers
-        parallelize_mp(iterables=[c for c in combs], rotset=rotset_sub, prefix=xx+1, cst_io=cst_io, motifs=motifs)
+        parallelize_mp(iterables=[c for c in combs], rotset=rotset_sub, prefix=xx+1, cst_io=cst_io, cst_atoms=cst_atoms, motifs=motifs)
 
 
 
