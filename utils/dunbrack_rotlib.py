@@ -99,9 +99,7 @@ def find_good_rotamers(rotlib, restype, cumulative_prob=1.0, secstruct=None, phi
                 else:
                     idx_to_add = None
                 if idx_to_add is not None:
-                    _df2 = pd.concat([_df2, _df.iloc[idx_to_add]], ignore_index=True)
-                    # _df2 = _df2.append(_df.iloc[idx_to_add], ignore_index=True)
-        # df = df.append(_df2, ignore_index=True)
+                    _df2 = pd.concat([_df2, _df.iloc[idx_to_add].to_frame().T], ignore_index=True)
         df = pd.concat([df, _df2], ignore_index=True)
     return df
 
