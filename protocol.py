@@ -198,7 +198,7 @@ def preselect_inverse_rotamers(rotset, restype_good_rotamers, keep_his_tautomer_
                     #     break
                     good_rotamers[i].append(res)
                     continue
-                if res.name3() == "HIS" and keep_his_tautomer_per_cst is not None:
+                if res.name3() == "HIS" and keep_his_tautomer_per_cst is not None and i in keep_his_tautomer_per_cst:
                     if res.name() != keep_his_tautomer_per_cst[i]:
                         continue
                 # Need to exclude proton CHIs
@@ -580,7 +580,6 @@ def check_clash(pose, catres_resnos, cutoff=1.7, ignore_respairs=None, cst_atoms
     cst_atoms: {resno1: (a1, a2, a3), resno2: (a1, a2, a3)}
     """
 
-    # combs = itertools.product(*[x for x in [pose.residues, pose.residues]])
     combs = itertools.combinations(range(1, pose.size()+1), 2)
     for c in combs:
         res1 = pose.residue(c[0])

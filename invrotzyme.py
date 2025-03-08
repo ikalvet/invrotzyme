@@ -11,12 +11,12 @@ import pyrosetta.rosetta
 import pyrosetta.distributed.io
 import sys, os
 import itertools
+import functools
+import operator
 import time
 import numpy as np
 import pandas as pd
 import multiprocessing
-import queue
-import threading
 import random
 import scipy.spatial
 script_dir = os.path.dirname(os.path.realpath(__file__))
@@ -30,14 +30,14 @@ import align_pdbs
 
 
 
-def process_rotamer_set_queue(q, prefix, bad_rotamers, rotamers, cst_io, cst_atoms, motifs):
+def process_rotamer_set_queue(q, early_stop, prefix, bad_rotamers, rotamers, cst_io, cst_atoms, motifs, results_found):
     while True:
-        _s = q.get()
-        if _s is None:
+        i_ids = q.get()
+        if i_ids is None:
             return
 
-        i = _s[0]
-        ids = _s[1]
+        i = i_ids[0]
+        ids = i_ids[1]
         # Grabbing a combination of inverse rotamers based on the provided
         # per-cst inverse rotamer ids.
         c = [rotamers[n][i] for n, i in enumerate(ids)]
@@ -150,7 +150,7 @@ def process_rotamer_set_queue(q, prefix, bad_rotamers, rotamers, cst_io, cst_ato
 
         clash = protocol.check_clash(pose, catres_resnos=catres_resnos.values(), ignore_respairs=ignore_clash_respairs, tip_atom=args.tip_atom, debug=args.debug)
         if clash is True:
-            if args.debug: print(f"{j}, clash in the final assembly")
+            if args.debug: print(f"{i}, clash in the final assembly")
             continue
         if args.debug: print(j, pose.sequence())
 
@@ -193,27 +193,39 @@ def process_rotamer_set_queue(q, prefix, bad_rotamers, rotamers, cst_io, cst_ato
         with open(pose_name, "w") as file:
             file.write("\n".join(pdbstr_new))
 
+        results_found.append(ids)
+        if args.max_outputs is not None and len(results_found) > args.max_outputs:
+            early_stop.value = True
+            print(f"Reached the output limit of {args.max_outputs}")
 
 
-def parallelize_mp(iterables, rotset, prefix, cst_io, cst_atoms, motifs):
-    print(f"{len(iterables)} configurations to process")
-    the_queue = multiprocessing.Queue()  # Queue stores the iterables
+
+
+def parallelize_mp(iterables, rotset, prefix, cst_io, cst_atoms, motifs, results_found):
+
+    the_queue = multiprocessing.Queue(maxsize=args.nproc)  # Queue stores the iterables
 
     start = time.time()
     manager = multiprocessing.Manager() 
-    bad_rotamers = manager.dict()  # Need a special dictionary to store outputs from multiple processes
-    results_found = manager.dict()
+    bad_rotamers = manager.dict()
+    early_stop = multiprocessing.Value("b", False)
 
-    for i, c in enumerate(iterables):
-        the_queue.put((i, c))
-
-    for j in range(len(c)):
-        bad_rotamers[j] = manager.list()
+    if results_found is None:
+        results_found = manager.list()
 
     print(f"Starting to generate inverse rotamer assemblies using {args.nproc} parallel processes.")
     pool = multiprocessing.Pool(processes=args.nproc,
                                 initializer=process_rotamer_set_queue,
-                                initargs=(the_queue, prefix, bad_rotamers, rotset, cst_io, cst_atoms, motifs, ))
+                                initargs=(the_queue, early_stop, prefix, bad_rotamers, rotset, cst_io, cst_atoms, motifs, results_found, ))
+
+    for i, c in enumerate(iterables):
+        if i == 0:
+            for j in range(len(c)):
+                bad_rotamers[j] = manager.list()
+        if early_stop.value == True:
+            the_queue.put(None)
+            break
+        the_queue.put((i, c))
 
     # None to end each process
     for _i in range(args.nproc):
@@ -231,6 +243,7 @@ def parallelize_mp(iterables, rotset, prefix, cst_io, cst_atoms, motifs):
 
     end = time.time()
     print(f"Processing all the rotamers in set {prefix} took {(end - start):.2f} seconds")
+    return results_found
 
 
 
@@ -346,6 +359,8 @@ def main(args):
     time.sleep(1)
     
     print(f"{len(all_inverse_rotamers_per_cst)} rotamer sets to process")
+
+    results_found = None
     for xx, rotset in enumerate(all_inverse_rotamers_per_cst):
         print(f"Non-redundant rotamer set {xx+1}")
         for cst_block, invrots in enumerate(rotset.invrots()):
@@ -403,10 +418,11 @@ def main(args):
             print(f"CST {cst_block}: {len(invrots)} inverse rotamers after filtering.")
     
         rotset_ids = [[i for i, y in enumerate(x)] for x in rotset_sub]
-        combs = itertools.product(*[x for x in rotset_ids])
+        rotamer_id_combinations = itertools.product(*[x for x in rotset_ids])
 
         # Processing this subset of rotamers
-        parallelize_mp(iterables=[c for c in combs], rotset=rotset_sub, prefix=xx+1, cst_io=cst_io, cst_atoms=cst_atoms, motifs=motifs)
+        print(f"{functools.reduce(operator.mul, map(len, rotset_ids), 1)} inverse rotamer combinations to process in this set.")
+        results_found = parallelize_mp(iterables=rotamer_id_combinations, rotset=rotset_sub, prefix=xx+1, cst_io=cst_io, cst_atoms=cst_atoms, motifs=motifs, results_found=results_found)
 
 
 
@@ -437,6 +453,7 @@ if __name__ == "__main__":
     parser.add_argument("--prefix", type=str, default= "", help="Prefix to be added to the beginning of output files")
     parser.add_argument("--tip_atom", action="store_true", default=False, help="Inverse rotamers will be pre-selected based on whether the tip atoms are placed geometrically differently. Rotamer diversity is ignored.")
     parser.add_argument("--nproc", type=int, help="Number of CPU cores used.")
+    parser.add_argument("--max_outputs", type=int, help="Maximum number of output structures that will be produced.")
     parser.add_argument("--debug", action="store_true", default=False, help="Debug mode. Will print out more output at each step. Will run in single-core mode.")
 
     args = parser.parse_args()
